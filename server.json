@@ -1,0 +1,18 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schemas/server.json",
+  "name": "nbp-mcp",
+  "description": "Local MCP server for NBP FX rates + gold fixing (Polish accounting-ready data).",
+  "repository": {
+    "url": "https://github.com/bartosz-kuc/nbp-mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registry_name": "pypi",
+      "name": "nbp-mcp",
+      "version": "0.1.0",
+      "runtime_hint": "uvx"
+    }
+  ]
+}
