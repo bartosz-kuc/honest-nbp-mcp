@@ -9,7 +9,7 @@ convert. Built primarily for Polish JDG owners who need NBP mid-rate for
 converting foreign-currency invoices to PLN in bookkeeping.
 
 Author: Bartosz Kuć <firma@bartosza.pl>
-Repo:   https://github.com/bartosz-kuc/nbp-mcp
+Repo:   https://github.com/bartosz-kuc/honest-nbp-mcp
 License: MIT
 """
 

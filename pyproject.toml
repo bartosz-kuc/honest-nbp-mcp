@@ -28,9 +28,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/bartosz-kuc/nbp-mcp"
-Repository = "https://github.com/bartosz-kuc/nbp-mcp"
-Issues = "https://github.com/bartosz-kuc/nbp-mcp/issues"
+Homepage = "https://github.com/bartosz-kuc/honest-nbp-mcp"
+Repository = "https://github.com/bartosz-kuc/honest-nbp-mcp"
+Issues = "https://github.com/bartosz-kuc/honest-nbp-mcp/issues"
 
 [project.scripts]
 nbp-mcp = "nbp_mcp:sync_main"

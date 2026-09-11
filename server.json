@@ -3,7 +3,7 @@
   "name": "nbp-mcp",
   "description": "Local MCP server for NBP FX rates + gold fixing (Polish accounting-ready data).",
   "repository": {
-    "url": "https://github.com/bartosz-kuc/nbp-mcp",
+    "url": "https://github.com/bartosz-kuc/honest-nbp-mcp",
     "source": "github"
   },
   "version": "0.1.0",

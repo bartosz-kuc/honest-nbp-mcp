@@ -38,7 +38,7 @@ Six tools:
 ## Setup
 
 ```bash
-git clone https://github.com/bartosz-kuc/nbp-mcp.git
+git clone https://github.com/bartosz-kuc/honest-nbp-mcp.git
 cd nbp-mcp
 python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt
