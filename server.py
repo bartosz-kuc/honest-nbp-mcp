@@ -16,6 +16,7 @@ License: MIT
 import asyncio
 import json
 import re
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import requests
@@ -28,6 +29,10 @@ NBP_BASE = "https://api.nbp.pl/api"
 CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 VALID_TABLES = {"A", "B", "C"}
+# How far back `before_date` looks for the last published table. Table A is
+# daily and Table B weekly (Wednesdays), so 14 days covers weekends, holiday
+# runs and a skipped Table B week.
+BEFORE_DATE_WINDOW_DAYS = 14
 
 
 def _validate_currency(code: str) -> str:
@@ -71,6 +76,31 @@ def _rate_for(currency: str, table: str, on_date: str | None) -> dict:
     return _get(path)
 
 
+def _last_rate_before(currency: str, table: str, before: str) -> dict:
+    """Rate from the last NBP table published strictly before `before` (YYYY-MM-DD).
+
+    Queries the date-range endpoint over the BEFORE_DATE_WINDOW_DAYS days preceding
+    `before` and keeps only the latest entry, so the result has the same shape as a
+    single-date response. Error payloads (404/400) are returned as dicts.
+    """
+    day = date.fromisoformat(before)
+    start = (day - timedelta(days=BEFORE_DATE_WINDOW_DAYS)).isoformat()
+    end = (day - timedelta(days=1)).isoformat()
+    try:
+        data = _get(f"exchangerates/rates/{table}/{currency}/{start}/{end}")
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code == 400:
+            return {
+                "error": f"NBP rejected the date range {start}..{end} (before_date is probably too far in the future)",
+                "status": 400,
+                "url": e.response.url,
+            }
+        raise
+    if isinstance(data, dict) and data.get("rates"):
+        return {**data, "rates": [max(data["rates"], key=lambda r: r["effectiveDate"])]}
+    return data
+
+
 server = Server("nbp")
 
 
@@ -81,7 +111,7 @@ async def _list_tools() -> list[Tool]:
             description=(
                 "Get the NBP exchange rate for a single currency vs PLN, on a specific date or the latest available. "
                 "Table A = daily rates for major currencies (USD, EUR, GBP, CHF, JPY, etc.). "
-                "Table B = twice-weekly rates for less common currencies. "
+                "Table B = weekly (Wednesday) rates for less common currencies. "
                 "Table C = daily buy/sell rates (bid/ask) for major currencies — use for actual FX transactions, not accounting. "
                 "For invoice-to-PLN conversion in Polish bookkeeping, use Table A. Note: NBP does not publish on weekends/holidays."
             ),
@@ -159,7 +189,9 @@ async def _list_tools() -> list[Tool]:
                 "Convert an amount from one currency to another using NBP mid-rate (Table A, or B if not in A). "
                 "Primary use case: converting a foreign-currency invoice to PLN for Polish bookkeeping. "
                 "Polish tax law requires using the NBP mid-rate from the last business day BEFORE the invoice date — "
-                "pass that date as `rate_date`, not the invoice date itself. Returns the amount, the rate used, and the effective date."
+                "pass the invoice date as `before_date` and the server uses the last table NBP published strictly before it. "
+                "`rate_date` instead uses the table published on exactly that date (no data on weekends/holidays). "
+                "Returns the amount, the rate used, and the effective date."
             ),
             inputSchema={
                 "type": "object",
@@ -167,7 +199,8 @@ async def _list_tools() -> list[Tool]:
                     "amount": {"type": "number", "description": "Amount to convert"},
                     "from_currency": {"type": "string", "description": "Source currency, 3-letter ISO 4217"},
                     "to_currency": {"type": "string", "default": "PLN", "description": "Target currency (default PLN)"},
-                    "rate_date": {"type": "string", "description": "Optional YYYY-MM-DD. Defaults to the latest published rate."},
+                    "rate_date": {"type": "string", "description": "Optional YYYY-MM-DD. Uses the table published on exactly this date (no data on weekends/holidays). Defaults to the latest published rate."},
+                    "before_date": {"type": "string", "description": "Optional YYYY-MM-DD, e.g. the invoice date. Uses the last table published strictly before this date. Cannot be combined with rate_date."},
                 },
                 "required": ["amount", "from_currency"],
             },
@@ -221,6 +254,14 @@ async def _call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         src = _validate_currency(arguments["from_currency"])
         dst = _validate_currency(arguments.get("to_currency", "PLN"))
         rate_date = _validate_date(arguments.get("rate_date"))
+        before_date = _validate_date(arguments.get("before_date"))
+        if rate_date and before_date:
+            raise ValueError("Pass either rate_date or before_date, not both")
+        if before_date:
+            try:
+                date.fromisoformat(before_date)
+            except ValueError:
+                raise ValueError(f"before_date is not a valid calendar date: {before_date!r}") from None
 
         if src == dst:
             payload = {"amount_in": amount, "from": src, "to": dst, "amount_out": amount, "rate": 1.0, "note": "Same currency"}
@@ -231,6 +272,11 @@ async def _call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         def _fetch(code: str) -> dict:
             if code == "PLN":
                 return {"currency": "PLN", "code": "PLN", "mid": 1.0, "table": None, "effectiveDate": None}
+            if before_date:
+                a = _last_rate_before(code, "A", before_date)
+                if isinstance(a, dict) and a.get("status") == 404:
+                    return _last_rate_before(code, "B", before_date)
+                return a
             a = _rate_for(code, "A", rate_date)
             if isinstance(a, dict) and a.get("status") == 404:
                 # Not in A — try B (less common currencies)
@@ -242,7 +288,7 @@ async def _call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         dst_data = _fetch(dst)
 
         for label, data in (("from_currency", src_data), ("to_currency", dst_data)):
-            if isinstance(data, dict) and data.get("status") == 404:
+            if isinstance(data, dict) and data.get("status") in (400, 404):
                 return [TextContent(type="text", text=json.dumps({"error": f"No rate available for {label}", "detail": data}, ensure_ascii=False, indent=2))]
 
         # Rate structures from NBP: {"table": "A", "currency": "...", "code": "USD", "rates": [{"no": "...", "effectiveDate": "YYYY-MM-DD", "mid": 4.05}]}
@@ -274,6 +320,14 @@ async def _call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             "to_effective_date": dst_date,
             "note": "Rate = from_mid_pln / to_mid_pln. NBP mid-rate is Polish accounting standard for FX bookkeeping.",
         }
+        if before_date:
+            payload["before_date"] = before_date
+            # UTC date is never ahead of the Warsaw date, so this errs on the side of warning.
+            if date.fromisoformat(before_date) > datetime.now(timezone.utc).date():
+                payload["warning"] = (
+                    "before_date is after today: if NBP has not yet published the table for the preceding "
+                    "business day, an older table was used. Check the *_effective_date fields."
+                )
         return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False, indent=2))]
 
     raise ValueError(f"Unknown tool: {name}")
