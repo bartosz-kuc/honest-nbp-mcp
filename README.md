@@ -95,7 +95,7 @@ No cloud middle. Nothing to log in to. No telemetry.
 
 ## For Polish accountants and JDG owners
 
-The important bit for księgowość: **the NBP mid-rate you use to book a foreign-currency invoice in PLN is the rate published on the last business day before the invoice date** (art. 11a ust. 1–2 ustawy o PIT; the CIT act has the same rule). Not the invoice date itself. This is a common source of manual mistakes. `convert(..., before_date="YYYY-MM-DD")` with the invoice date does the look-back for you and returns the effective date of the table it used, so you can record it. `convert(..., rate_date="YYYY-MM-DD")` asks NBP for that exact date only — if NBP didn't publish that day, the response says so.
+The important bit for księgowość: **the NBP mid-rate you use to book a foreign-currency amount in PLN is the rate published on the last business day before the day the revenue is earned or the cost incurred** — for most invoices, the business day before the invoice or delivery date (art. 11a ust. 1–2 ustawy o PIT; in the CIT act art. 12 ust. 2 and art. 15 ust. 1). Not that day's own rate. This is a common source of manual mistakes. `convert(..., before_date="YYYY-MM-DD")` with the invoice date does the look-back for you and returns the effective date of the table it used, so you can record it. `convert(..., rate_date="YYYY-MM-DD")` asks NBP for that exact date only — if NBP didn't publish that day, the response says so.
 
 ## Author
 
