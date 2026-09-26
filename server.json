@@ -6,13 +6,5 @@
     "url": "https://github.com/bartosz-kuc/honest-nbp-mcp",
     "source": "github"
   },
-  "version": "0.1.0",
-  "packages": [
-    {
-      "registry_name": "pypi",
-      "name": "nbp-mcp",
-      "version": "0.1.0",
-      "runtime_hint": "uvx"
-    }
-  ]
+  "version": "0.1.0"
 }
